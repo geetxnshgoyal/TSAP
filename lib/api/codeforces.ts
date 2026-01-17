@@ -135,3 +135,34 @@ export function getCodeforcesRatingColor(rating: number): string {
     if (rating >= 1200) return 'text-green-400'; // Pupil
     return 'text-gray-400'; // Newbie
 }
+
+/**
+ * Get tag statistics from submissions
+ */
+export async function getCodeforcesTagStats(handle: string): Promise<{ [key: string]: number }> {
+    try {
+        const submissions = await getCodeforcesSubmissions(handle);
+        const tagCounts: { [key: string]: number } = {};
+        const solvedProblems = new Set<string>();
+
+        submissions.forEach(sub => {
+            if (sub.verdict === 'OK' && sub.problem.tags) {
+                const problemId = `${sub.problem.contestId}-${sub.problem.index}`;
+
+                // Only count unique problems per tag
+                if (!solvedProblems.has(problemId)) {
+                    solvedProblems.add(problemId);
+
+                    sub.problem.tags.forEach(tag => {
+                        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+                    });
+                }
+            }
+        });
+
+        return tagCounts;
+    } catch (error) {
+        console.error('Error calculating tag stats:', error);
+        return {};
+    }
+}

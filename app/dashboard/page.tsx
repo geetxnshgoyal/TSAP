@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { getCodeforcesStats, getCodeforcesRatingColor, getCodeforcesSubmissions } from '@/lib/api/codeforces';
 import { getCodeChefStats, getCodeChefRatingColor } from '@/lib/api/codechef';
+import { getLeetCodeStats } from '@/lib/api/leetcode';
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -143,10 +144,10 @@ function MentorDashboard({ user }: { user: User }) {
                         </div>
                     </div>
                     <div className="flex items-center space-x-4">
-                        <div className="hidden md:block text-right">
-                            <p className="font-medium text-gray-100">{user.name}</p>
+                        <a href="/profile" className="hidden md:block text-right hover:opacity-80 transition-opacity group">
+                            <p className="font-medium text-gray-100 group-hover:text-terminal-primary transition-colors">{user.name}</p>
                             <p className="text-xs text-terminal-muted">Mentor</p>
-                        </div>
+                        </a>
                         <button onClick={handleLogout} className="btn-ghost">
                             <LogOut className="w-5 h-5" />
                         </button>
@@ -355,16 +356,29 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                     stars: stats.stars,
                     lastSynced: new Date(),
                 };
-            } else {
-                // For other platforms, use placeholder data for now
+            } else if (connectModal.platform === 'leetcode') {
+                // Fetch real stats from LeetCode
+                const stats = await getLeetCodeStats(usernameInput.trim());
+
+                if (!stats) {
+                    alert(`❌ Could not find LeetCode user "${usernameInput.trim()}". Please check the username and try again.`);
+                    setConnectingPlatform(null);
+                    return;
+                }
+
                 platformData = {
                     username: usernameInput.trim(),
                     connected: true,
-                    problemsSolved: 0,
-                    rating: 0,
-                    rank: undefined,
+                    problemsSolved: stats.problemsSolved,
+                    ranking: stats.ranking,
+                    easySolved: stats.easySolved,
+                    mediumSolved: stats.mediumSolved,
+                    hardSolved: stats.hardSolved,
                     lastSynced: new Date(),
                 };
+            } else {
+                // Should not happen
+                return;
             }
 
             // Save to Firestore
@@ -419,11 +433,11 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                     </nav>
 
                     <div className="flex items-center space-x-4">
-                        <div className="hidden md:block text-right">
-                            <p className="font-medium text-gray-100">{user.name}</p>
+                        <a href="/profile" className="hidden md:block text-right hover:opacity-80 transition-opacity group">
+                            <p className="font-medium text-gray-100 group-hover:text-terminal-primary transition-colors">{user.name}</p>
                             <p className="text-xs text-terminal-muted">{user.email}</p>
-                        </div>
-                        <button onClick={handleLogout} className="btn-ghost">
+                        </a>
+                        <button onClick={handleLogout} className="btn-ghost" title="Logout">
                             <LogOut className="w-5 h-5" />
                         </button>
                     </div>
