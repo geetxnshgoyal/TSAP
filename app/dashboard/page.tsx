@@ -10,7 +10,7 @@ import {
     Terminal, LogOut, Link2, TrendingUp, Flame,
     Calendar, Code2, Award, BarChart3, Users, Zap
 } from 'lucide-react';
-import { getCodeforcesStats, getCodeforcesRatingColor } from '@/lib/api/codeforces';
+import { getCodeforcesStats, getCodeforcesRatingColor, getCodeforcesSubmissions } from '@/lib/api/codeforces';
 import { getCodeChefStats, getCodeChefRatingColor } from '@/lib/api/codechef';
 
 export default function DashboardPage() {
@@ -265,6 +265,30 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
     const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
     const [connectModal, setConnectModal] = useState<{ platform: string; name: string } | null>(null);
     const [usernameInput, setUsernameInput] = useState('');
+    const [recentSubmissions, setRecentSubmissions] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchActivity = async () => {
+            if (user?.platforms?.codeforces?.connected && user.platforms.codeforces.username) {
+                try {
+                    const subs = await getCodeforcesSubmissions(user.platforms.codeforces.username);
+                    // Format and take top 5
+                    const formatted = subs.slice(0, 5).map(sub => ({
+                        id: sub.id,
+                        platform: 'codeforces',
+                        problem: sub.problem.name,
+                        verdict: sub.verdict === 'OK' ? 'Accepted' : 'Wrong Answer',
+                        timestamp: sub.creationTimeSeconds * 1000,
+                        url: `https://codeforces.com/contest/${sub.problem.contestId}/problem/${sub.problem.index}`
+                    }));
+                    setRecentSubmissions(formatted);
+                } catch (e) {
+                    console.error("Failed to fetch submissions", e);
+                }
+            }
+        };
+        fetchActivity();
+    }, [user]);
 
     const handleLogout = async () => {
         await auth.signOut();
@@ -460,46 +484,96 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                     />
                 </div>
 
-                {/* Platform Connections */}
-                <div className="card">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-2xl font-bold text-gray-100">Platform Connections</h3>
-                        <Link2 className="w-6 h-6 text-terminal-primary" />
+                {/* Platform Connections & Recent Activity */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Connections */}
+                    <div className="lg:col-span-2">
+                        <div className="card h-full">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-2xl font-bold text-gray-100">Platform Connections</h3>
+                                <Link2 className="w-6 h-6 text-terminal-primary" />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <PlatformCard
+                                    name="LeetCode"
+                                    platform="leetcode"
+                                    connected={!!user.platforms.leetcode?.connected}
+                                    username={user.platforms.leetcode?.username}
+                                    problemsSolved={user.platforms.leetcode?.problemsSolved}
+                                    rating={user.platforms.leetcode?.rating}
+                                    onConnect={() => handleConnectPlatform('leetcode')}
+                                    loading={connectingPlatform === 'leetcode'}
+                                />
+                                <PlatformCard
+                                    name="Codeforces"
+                                    platform="codeforces"
+                                    connected={!!user.platforms.codeforces?.connected}
+                                    username={user.platforms.codeforces?.username}
+                                    problemsSolved={user.platforms.codeforces?.problemsSolved}
+                                    rating={user.platforms.codeforces?.rating}
+                                    rank={user.platforms.codeforces?.rank}
+                                    onConnect={() => handleConnectPlatform('codeforces')}
+                                    loading={connectingPlatform === 'codeforces'}
+                                />
+                                <PlatformCard
+                                    name="CodeChef"
+                                    platform="codechef"
+                                    connected={!!user.platforms.codechef?.connected}
+                                    username={user.platforms.codechef?.username}
+                                    problemsSolved={user.platforms.codechef?.problemsSolved}
+                                    rating={user.platforms.codechef?.rating}
+                                    onConnect={() => handleConnectPlatform('codechef')}
+                                    loading={connectingPlatform === 'codechef'}
+                                />
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <PlatformCard
-                            name="LeetCode"
-                            platform="leetcode"
-                            connected={!!user.platforms.leetcode?.connected}
-                            username={user.platforms.leetcode?.username}
-                            problemsSolved={user.platforms.leetcode?.problemsSolved}
-                            rating={user.platforms.leetcode?.rating}
-                            onConnect={() => handleConnectPlatform('leetcode')}
-                            loading={connectingPlatform === 'leetcode'}
-                        />
-                        <PlatformCard
-                            name="Codeforces"
-                            platform="codeforces"
-                            connected={!!user.platforms.codeforces?.connected}
-                            username={user.platforms.codeforces?.username}
-                            problemsSolved={user.platforms.codeforces?.problemsSolved}
-                            rating={user.platforms.codeforces?.rating}
-                            rank={user.platforms.codeforces?.rank}
-                            onConnect={() => handleConnectPlatform('codeforces')}
-                            loading={connectingPlatform === 'codeforces'}
-                        />
-                        <PlatformCard
-                            name="CodeChef"
-                            platform="codechef"
-                            connected={!!user.platforms.codechef?.connected}
-                            username={user.platforms.codechef?.username}
-                            problemsSolved={user.platforms.codechef?.problemsSolved}
-                            rating={user.platforms.codechef?.rating}
-                            onConnect={() => handleConnectPlatform('codechef')}
-                            loading={connectingPlatform === 'codechef'}
-                        />
+                    {/* Recent Activity Side Panel */}
+                    <div className="lg:col-span-1">
+                        <div className="card h-full flex flex-col">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-xl font-bold text-gray-100">Recent Activity</h3>
+                                <TrendingUp className="w-5 h-5 text-terminal-accent" />
+                            </div>
+
+                            <div className="flex-1 space-y-4">
+                                {recentSubmissions.length > 0 ? (
+                                    recentSubmissions.map((sub) => (
+                                        <a
+                                            key={sub.id}
+                                            href={sub.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="block p-3 rounded-lg bg-terminal-surface border border-terminal-border hover:border-terminal-primary/50 transition-colors group"
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                                    Codeforces
+                                                </span>
+                                                <span className="text-xs text-terminal-muted">
+                                                    {new Date(sub.timestamp).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <h4 className="font-medium text-gray-200 group-hover:text-terminal-primary transition-colors truncate">
+                                                {sub.problem}
+                                            </h4>
+                                            <div className={`text-xs mt-1 ${sub.verdict === 'Accepted' ? 'text-green-400' : 'text-red-400'}`}>
+                                                {sub.verdict}
+                                            </div>
+                                        </a>
+                                    ))
+                                ) : (
+                                    <div className="text-center py-8 text-terminal-muted">
+                                        <p>No recent activity found.</p>
+                                        <p className="text-xs mt-1">Connect platforms to track submissions.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
+
                 </div>
 
                 {/* Quick Links */}
