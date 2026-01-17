@@ -8,8 +8,19 @@ import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
 import {
     Terminal, LogOut, Link2, TrendingUp, Flame,
-    Calendar, Code2, Award, BarChart3, Users, Zap, ArrowLeft, Mail
+    Calendar, Code2, Award, BarChart3, Users, Zap, ArrowLeft, Mail, RefreshCw
 } from 'lucide-react';
+
+// ... (imports)
+
+// ... (in MemberDashboard component)
+
+
+// ... (inside return, update PlatformCard usage)
+
+// ... (Update PlatformCard definition)
+
+
 import { getCodeforcesStats, getCodeforcesRatingColor, getCodeforcesSubmissions } from '@/lib/api/codeforces';
 import { getCodeChefStats, getCodeChefRatingColor } from '@/lib/api/codechef';
 import { getLeetCodeStats } from '@/lib/api/leetcode';
@@ -318,6 +329,77 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
     const [connectModal, setConnectModal] = useState<{ platform: string; name: string } | null>(null);
     const [usernameInput, setUsernameInput] = useState('');
     const [recentSubmissions, setRecentSubmissions] = useState<any[]>([]);
+    const [syncingPlatform, setSyncingPlatform] = useState<string | null>(null);
+
+    const handleSync = async (platform: 'leetcode' | 'codeforces' | 'codechef') => {
+        if (!user) return;
+        const platformData = user.platforms[platform];
+        if (!platformData?.username) return;
+
+        setSyncingPlatform(platform);
+        try {
+            let newStats;
+            if (platform === 'codeforces') {
+                const stats = await getCodeforcesStats(platformData.username);
+                if (stats) {
+                    newStats = {
+                        ...platformData,
+                        problemsSolved: stats.solvedProblems,
+                        rating: stats.rating,
+                        rank: stats.rank,
+                        maxRating: stats.maxRating,
+                        maxRank: stats.maxRank,
+                        lastSynced: new Date(),
+                    };
+                }
+            } else if (platform === 'codechef') {
+                const stats = await getCodeChefStats(platformData.username);
+                if (stats) {
+                    newStats = {
+                        ...platformData,
+                        problemsSolved: stats.problemsSolved,
+                        rating: stats.rating,
+                        rank: stats.rank,
+                        stars: stats.stars,
+                        lastSynced: new Date(),
+                    };
+                }
+            } else if (platform === 'leetcode') {
+                const stats = await getLeetCodeStats(platformData.username);
+                if (stats) {
+                    newStats = {
+                        ...platformData,
+                        problemsSolved: stats.problemsSolved,
+                        ranking: stats.ranking,
+                        easySolved: stats.easySolved,
+                        mediumSolved: stats.mediumSolved,
+                        hardSolved: stats.hardSolved,
+                        lastSynced: new Date(),
+                    };
+                }
+            }
+
+            if (newStats) {
+                await updateDoc(doc(db, 'users', user.id), {
+                    [`platforms.${platform}`]: newStats
+                });
+                // Optimistic update
+                setUser({
+                    ...user,
+                    platforms: {
+                        ...user.platforms,
+                        [platform]: newStats
+                    }
+                });
+            }
+        } catch (error) {
+            console.error(`Error syncing ${platform}:`, error);
+            alert(`Failed to sync ${platform}`);
+        } finally {
+            setSyncingPlatform(null);
+        }
+    };
+
 
     useEffect(() => {
         const fetchActivity = async () => {
@@ -562,7 +644,10 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                                     problemsSolved={user.platforms.leetcode?.problemsSolved}
                                     rating={user.platforms.leetcode?.rating}
                                     onConnect={() => handleConnectPlatform('leetcode')}
+                                    onSync={() => handleSync('leetcode')}
                                     loading={connectingPlatform === 'leetcode'}
+                                    syncing={syncingPlatform === 'leetcode'}
+                                    lastSynced={user.platforms.leetcode?.lastSynced}
                                 />
                                 <PlatformCard
                                     name="Codeforces"
@@ -573,7 +658,10 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                                     rating={user.platforms.codeforces?.rating}
                                     rank={user.platforms.codeforces?.rank}
                                     onConnect={() => handleConnectPlatform('codeforces')}
+                                    onSync={() => handleSync('codeforces')}
                                     loading={connectingPlatform === 'codeforces'}
+                                    syncing={syncingPlatform === 'codeforces'}
+                                    lastSynced={user.platforms.codeforces?.lastSynced}
                                 />
                                 <PlatformCard
                                     name="CodeChef"
@@ -583,7 +671,10 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                                     problemsSolved={user.platforms.codechef?.problemsSolved}
                                     rating={user.platforms.codechef?.rating}
                                     onConnect={() => handleConnectPlatform('codechef')}
+                                    onSync={() => handleSync('codechef')}
                                     loading={connectingPlatform === 'codechef'}
+                                    syncing={syncingPlatform === 'codechef'}
+                                    lastSynced={user.platforms.codechef?.lastSynced}
                                 />
                             </div>
                         </div>
@@ -787,7 +878,10 @@ function PlatformCard({
     rating,
     rank,
     onConnect,
+    onSync,
     loading,
+    syncing,
+    lastSynced
 }: {
     name: string;
     platform: string;
@@ -797,7 +891,10 @@ function PlatformCard({
     rating?: number;
     rank?: string;
     onConnect: () => void;
+    onSync?: () => void;
     loading: boolean;
+    syncing?: boolean;
+    lastSynced?: any; // Date or Firestore timestamp
 }) {
     return (
         <div className={`card-hover ${connected ? 'border-terminal-primary' : ''}`}>
@@ -808,9 +905,21 @@ function PlatformCard({
 
             {connected ? (
                 <div className="space-y-3">
-                    <div>
-                        <p className="text-sm text-terminal-muted">Username</p>
-                        <p className="font-mono text-terminal-primary">@{username}</p>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-sm text-terminal-muted">Username</p>
+                            <p className="font-mono text-terminal-primary">@{username}</p>
+                        </div>
+                        {onSync && (
+                            <button
+                                onClick={onSync}
+                                disabled={syncing}
+                                className={`p-1.5 rounded-md bg-terminal-surface border border-terminal-border hover:border-terminal-primary text-terminal-muted hover:text-white transition-all ${syncing ? 'animate-spin text-terminal-primary border-terminal-primary' : ''}`}
+                                title="Sync stats"
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -819,7 +928,7 @@ function PlatformCard({
                         </div>
                         <div>
                             <p className="text-xs text-terminal-muted">Rating</p>
-                            <p className="text-xl font-bold text-terminal-secondary">{rating}</p>
+                            <p className="text-xl font-bold text-terminal-secondary">{rating || 'N/A'}</p>
                         </div>
                     </div>
                     {rank && (
@@ -828,7 +937,12 @@ function PlatformCard({
                             <p className="text-sm font-medium text-terminal-accent">{rank}</p>
                         </div>
                     )}
-                    <button className="btn-outline w-full text-sm" disabled>
+                    {lastSynced && (
+                        <p className="text-[10px] text-terminal-muted text-right">
+                            Synced: {new Date(lastSynced?.seconds ? lastSynced.seconds * 1000 : lastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                    )}
+                    <button className="btn-outline w-full text-sm cursor-default hover:bg-transparent" disabled>
                         <Link2 className="w-4 h-4 mr-2" />
                         Connected
                     </button>

@@ -172,6 +172,12 @@ export default function LeaderboardPage() {
     );
 }
 
+import Link from 'next/link';
+
+// ... (existing imports)
+
+// ... (LeaderboardPage component remains mostly same, just updating Subcomponents)
+
 function PodiumCard({ entry, rank }: { entry: LeaderboardEntry; rank: number }) {
     const isGold = rank === 1;
     const isSilver = rank === 2;
@@ -185,7 +191,10 @@ function PodiumCard({ entry, rank }: { entry: LeaderboardEntry; rank: number }) 
     const glowClass = isGold ? 'shadow-[0_0_30px_rgba(234,179,8,0.2)]' : '';
 
     return (
-        <div className={`relative flex flex-col items-center justify-end ${heightClass} ${bgColor} border ${borderColor} rounded-t-2xl p-6 backdrop-blur-sm ${glowClass}`}>
+        <Link
+            href={`/profile/${entry.userId}`}
+            className={`relative flex flex-col items-center justify-end ${heightClass} ${bgColor} border ${borderColor} rounded-t-2xl p-6 backdrop-blur-sm ${glowClass} transition-transform hover:-translate-y-2 cursor-pointer group`}
+        >
             {/* Crown for first place */}
             {isGold && <Crown className="w-12 h-12 text-yellow-500 absolute -top-14 animate-bounce" />}
 
@@ -195,12 +204,12 @@ function PodiumCard({ entry, rank }: { entry: LeaderboardEntry; rank: number }) 
             </div>
 
             {/* Avatar Placeholder */}
-            <div className={`w-20 h-20 rounded-full border-4 ${isGold ? 'border-yellow-500' : isSilver ? 'border-gray-400' : 'border-orange-700'} bg-terminal-surface flex items-center justify-center text-3xl font-bold mb-4 shadow-lg`}>
+            <div className={`w-20 h-20 rounded-full border-4 ${isGold ? 'border-yellow-500' : isSilver ? 'border-gray-400' : 'border-orange-700'} bg-terminal-surface flex items-center justify-center text-3xl font-bold mb-4 shadow-lg group-hover:scale-105 transition-transform`}>
                 {entry.user.name.charAt(0).toUpperCase()}
             </div>
 
             {/* Name & Batch */}
-            <h3 className="font-bold text-gray-100 text-lg text-center leading-tight mb-1 truncate w-full">{entry.user.name}</h3>
+            <h3 className="font-bold text-gray-100 text-lg text-center leading-tight mb-1 truncate w-full group-hover:text-terminal-primary transition-colors">{entry.user.name}</h3>
             {entry.user.batch && <p className="text-xs text-terminal-muted mb-4">Batch {entry.user.batch}</p>}
 
             {/* Stats */}
@@ -217,17 +226,20 @@ function PodiumCard({ entry, rank }: { entry: LeaderboardEntry; rank: number }) 
 
             {/* Platform Pills - Absolute or just small below */}
             <div className="flex gap-1 mt-3 justify-center">
-                {entry.platforms.leetcode > 0 && <div className="w-2 h-2 rounded-full bg-yellow-500" title="LeetCode Active"></div>}
-                {entry.platforms.codeforces > 0 && <div className="w-2 h-2 rounded-full bg-blue-500" title="Codeforces Active"></div>}
-                {entry.platforms.codechef > 0 && <div className="w-2 h-2 rounded-full bg-orange-500" title="CodeChef Active"></div>}
+                {(entry.platforms.leetcode || 0) > 0 && <div className="w-2 h-2 rounded-full bg-yellow-500" title="LeetCode Active"></div>}
+                {(entry.platforms.codeforces || 0) > 0 && <div className="w-2 h-2 rounded-full bg-blue-500" title="Codeforces Active"></div>}
+                {(entry.platforms.codechef || 0) > 0 && <div className="w-2 h-2 rounded-full bg-orange-500" title="CodeChef Active"></div>}
             </div>
-        </div>
+        </Link>
     );
 }
 
 function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
     return (
-        <div className="flex flex-col md:flex-row items-center p-4 hover:bg-white/5 transition-colors group">
+        <Link
+            href={`/profile/${entry.userId}`}
+            className="flex flex-col md:flex-row items-center p-4 hover:bg-white/5 transition-colors group cursor-pointer"
+        >
             {/* Rank & User Info */}
             <div className="flex items-center w-full md:flex-1 mb-2 md:mb-0">
                 <div className="w-16 text-center font-mono font-bold text-terminal-muted group-hover:text-white transition-colors">
@@ -235,11 +247,11 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
                 </div>
 
                 <div className="flex items-center flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 flex items-center justify-center font-bold text-gray-300 mr-4 shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 flex items-center justify-center font-bold text-gray-300 mr-4 shrink-0 group-hover:border-terminal-primary transition-colors">
                         {entry.user.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                        <h4 className="font-bold text-gray-100 truncate">{entry.user.name}</h4>
+                        <h4 className="font-bold text-gray-100 truncate group-hover:text-terminal-primary transition-colors">{entry.user.name}</h4>
                         <div className="flex items-center gap-2 mt-0.5">
                             {entry.user.batch && (
                                 <span className="text-xs text-terminal-muted px-1.5 py-0.5 rounded bg-terminal-border/50">
@@ -247,17 +259,17 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
                                 </span>
                             )}
                             <div className="flex gap-1.5 ml-2">
-                                {entry.platforms.leetcode > 0 && (
+                                {(entry.platforms.leetcode || 0) > 0 && (
                                     <span className="text-[10px] px-1.5 rounded-sm bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-mono">
                                         LC:{entry.platforms.leetcode}
                                     </span>
                                 )}
-                                {entry.platforms.codeforces > 0 && (
+                                {(entry.platforms.codeforces || 0) > 0 && (
                                     <span className="text-[10px] px-1.5 rounded-sm bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
                                         CF:{entry.platforms.codeforces}
                                     </span>
                                 )}
-                                {entry.platforms.codechef > 0 && (
+                                {(entry.platforms.codechef || 0) > 0 && (
                                     <span className="text-[10px] px-1.5 rounded-sm bg-orange-500/10 text-orange-500 border border-orange-500/20 font-mono">
                                         CC:{entry.platforms.codechef}
                                     </span>
@@ -292,6 +304,6 @@ function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
                     </span>
                 </div>
             </div>
-        </div>
+        </Link>
     );
 }

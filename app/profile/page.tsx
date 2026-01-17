@@ -269,7 +269,7 @@ export default function ProfilePage() {
                                                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
                                                     <PolarGrid stroke="#334155" />
                                                     <PolarAngleAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                                                    <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: '#cbd5e1', fontSize: 12, fontWeight: 'bold' }} axisLine={false} />
+                                                    <PolarRadiusAxis angle={90} domain={[0, 'auto']} tick={{ fill: '#cbd5e1', fontSize: 12, fontWeight: 'bold' }} axisLine={false} />
                                                     <Radar
                                                         name="Problems Solved"
                                                         dataKey="count"
