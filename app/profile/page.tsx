@@ -6,8 +6,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
-import { Terminal, LogOut, ArrowLeft, Save, User as UserIcon, Mail, Hash, BookOpen, Activity } from 'lucide-react';
+import { Terminal, LogOut, ArrowLeft, Save, User as UserIcon, Mail, Hash, BookOpen, Activity, BarChart, PieChart } from 'lucide-react';
 import { getCodeforcesTagStats } from '@/lib/api/codeforces';
+import {
+    Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+    BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+} from 'recharts';
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -23,8 +27,9 @@ export default function ProfilePage() {
     });
 
     // Analytics State
-    const [tagStats, setTagStats] = useState<{ name: string; count: number; percentage: number }[]>([]);
+    const [tagStats, setTagStats] = useState<{ name: string; count: number; fullMark: number }[]>([]);
     const [loadingStats, setLoadingStats] = useState(false);
+    const [chartType, setChartType] = useState<'radar' | 'bar'>('radar');
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -69,12 +74,16 @@ export default function ProfilePage() {
                 .map(([name, count]) => ({ name, count }))
                 .sort((a, b) => b.count - a.count);
 
-            const maxCount = sortedStats.length > 0 ? sortedStats[0].count : 1;
+            const maxCount = sortedStats.length > 0 ? sortedStats[0].count : 100;
 
+            // Format for charts
+            // Take top 8 for Radar, Top 15 for Bar
             setTagStats(sortedStats.map(s => ({
-                ...s,
-                percentage: (s.count / maxCount) * 100
+                name: s.name.charAt(0).toUpperCase() + s.name.slice(1), // Capitalize
+                count: s.count,
+                fullMark: maxCount
             })));
+
         } catch (error) {
             console.error("Failed to fetch topic stats", error);
         } finally {
@@ -111,6 +120,10 @@ export default function ProfilePage() {
     }
 
     if (!user) return null;
+
+    // Data subsets
+    const radarData = tagStats.slice(0, 6); // Top 6 skills for neat radar
+    const barData = tagStats.slice(0, 10);  // Top 10 for bar chart
 
     return (
         <div className="min-h-screen grid-bg">
@@ -170,7 +183,6 @@ export default function ProfilePage() {
                                             className="input w-full pl-10 opacity-50 cursor-not-allowed"
                                         />
                                     </div>
-                                    <p className="text-xs text-terminal-muted mt-1">Email cannot be changed</p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-terminal-muted mb-1">Roll Number</label>
@@ -216,7 +228,7 @@ export default function ProfilePage() {
                     {/* Right Column: Strong Topics Analytics */}
                     <div className="lg:col-span-2 space-y-6">
                         <div className="card glass">
-                            <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                                 <div>
                                     <h2 className="text-xl font-bold text-gray-100 flex items-center">
                                         <Activity className="w-5 h-5 mr-2 text-terminal-accent" />
@@ -224,64 +236,117 @@ export default function ProfilePage() {
                                     </h2>
                                     <p className="text-sm text-terminal-muted mt-1">Based on unique solved problems from Codeforces</p>
                                 </div>
-                                {!user.platforms?.codeforces?.username && (
-                                    <span className="text-xs badge-warning">Connect Codeforces to view</span>
+
+                                {tagStats.length > 0 && (
+                                    <div className="flex bg-terminal-surface rounded-lg p-1 border border-terminal-border">
+                                        <button
+                                            onClick={() => setChartType('radar')}
+                                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${chartType === 'radar' ? 'bg-terminal-primary text-white shadow-lg' : 'text-terminal-muted hover:text-white'}`}
+                                        >
+                                            <PieChart className="w-4 h-4 mr-2" />
+                                            Skill Web
+                                        </button>
+                                        <button
+                                            onClick={() => setChartType('bar')}
+                                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center ${chartType === 'bar' ? 'bg-terminal-primary text-white shadow-lg' : 'text-terminal-muted hover:text-white'}`}
+                                        >
+                                            <BarChart className="w-4 h-4 mr-2" />
+                                            Top Topics
+                                        </button>
+                                    </div>
                                 )}
                             </div>
 
                             {loadingStats ? (
-                                <div className="py-12 flex justify-center">
+                                <div className="py-20 flex justify-center">
                                     <div className="spinner"></div>
                                 </div>
                             ) : tagStats.length > 0 ? (
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4 mb-4">
-                                        {/* Summary Cards */}
-                                        <div className="bg-terminal-surface rounded-lg p-4 border border-terminal-border">
-                                            <p className="text-terminal-muted text-xs uppercase font-bold">Strongest Topic</p>
-                                            <p className="text-xl font-bold text-terminal-success">{tagStats[0].name}</p>
-                                            <p className="text-xs text-gray-400">{tagStats[0].count} problems solved</p>
+                                <div className="min-h-[400px] w-full flex items-center justify-center bg-terminal-surface/30 rounded-xl border border-white/5 p-4">
+                                    {chartType === 'radar' ? (
+                                        <div className="w-full h-[400px]">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                                                    <PolarGrid stroke="#334155" />
+                                                    <PolarAngleAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                                                    <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: '#475569' }} axisLine={false} />
+                                                    <Radar
+                                                        name="Problems Solved"
+                                                        dataKey="count"
+                                                        stroke="#22c55e"
+                                                        strokeWidth={2}
+                                                        fill="#22c55e"
+                                                        fillOpacity={0.4}
+                                                    />
+                                                    <Tooltip
+                                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }}
+                                                        itemStyle={{ color: '#22c55e' }}
+                                                    />
+                                                </RadarChart>
+                                            </ResponsiveContainer>
+                                            <p className="text-center text-xs text-terminal-muted mt-2">
+                                                Top 6 diverse topics show your "Skill Shape"
+                                            </p>
                                         </div>
-                                        <div className="bg-terminal-surface rounded-lg p-4 border border-terminal-border">
-                                            <p className="text-terminal-muted text-xs uppercase font-bold">Diverse Topics</p>
-                                            <p className="text-xl font-bold text-terminal-accent">{tagStats.length}</p>
-                                            <p className="text-xs text-gray-400">Total unique tags covered</p>
+                                    ) : (
+                                        <div className="w-full h-[400px]">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <ReBarChart
+                                                    data={barData}
+                                                    layout="vertical"
+                                                    margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                                                >
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={true} vertical={false} />
+                                                    <XAxis type="number" stroke="#64748b" />
+                                                    <YAxis dataKey="name" type="category" width={100} stroke="#94a3b8" tick={{ fontSize: 11 }} />
+                                                    <Tooltip
+                                                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }}
+                                                    />
+                                                    <Bar dataKey="count" name="Problems Solved" radius={[0, 4, 4, 0]}>
+                                                        {barData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={
+                                                                index === 0 ? '#22c55e' : // Top 1 -> Green
+                                                                    index < 3 ? '#3b82f6' :   // Top 3 -> Blue
+                                                                        '#6366f1'                 // Rest -> Indigo
+                                                            } />
+                                                        ))}
+                                                    </Bar>
+                                                </ReBarChart>
+                                            </ResponsiveContainer>
                                         </div>
-                                    </div>
-
-                                    <h3 className="text-sm font-bold text-gray-300 mb-3">Topic Breakdown</h3>
-                                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                        {tagStats.map((tag) => (
-                                            <div key={tag.name} className="group">
-                                                <div className="flex justify-between items-end mb-1">
-                                                    <span className="text-sm font-medium text-gray-300 group-hover:text-terminal-primary transition-colors">
-                                                        {tag.name}
-                                                    </span>
-                                                    <span className="text-xs text-terminal-muted">
-                                                        {tag.count} problems
-                                                    </span>
-                                                </div>
-                                                <div className="w-full bg-terminal-surface rounded-full h-2.5 overflow-hidden">
-                                                    <div
-                                                        className={`h-2.5 rounded-full transition-all duration-1000 ${tag.count >= 50 ? 'bg-terminal-success shadow-[0_0_10px_rgba(34,197,94,0.5)]' :
-                                                                tag.count >= 20 ? 'bg-terminal-primary' :
-                                                                    'bg-terminal-secondary'
-                                                            }`}
-                                                        style={{ width: `${tag.percentage}%` }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    )}
                                 </div>
                             ) : (
-                                <div className="text-center py-12 text-terminal-muted bg-terminal-surface/30 rounded-lg border border-dashed border-terminal-border">
+                                <div className="text-center py-16 text-terminal-muted bg-terminal-surface/30 rounded-lg border border-dashed border-terminal-border">
                                     <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                     {user.platforms?.codeforces?.username ? (
-                                        <p>No solved problems found with tags yet.</p>
+                                        <p>No solved problems with tags found yet.</p>
                                     ) : (
                                         <p>Connect your Codeforces account on the Dashboard to see your topic strengths!</p>
                                     )}
+                                </div>
+                            )}
+
+                            {/* Stats Summary - Kept for quick numerical reference */}
+                            {tagStats.length > 0 && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                                    <div className="bg-terminal-surface rounded-lg p-3 border border-terminal-border text-center">
+                                        <p className="text-terminal-muted text-[10px] uppercase font-bold tracking-wider">Strongest</p>
+                                        <p className="text-lg font-bold text-terminal-success truncate px-1">{tagStats[0].name}</p>
+                                    </div>
+                                    <div className="bg-terminal-surface rounded-lg p-3 border border-terminal-border text-center">
+                                        <p className="text-terminal-muted text-[10px] uppercase font-bold tracking-wider">Total Tags</p>
+                                        <p className="text-lg font-bold text-terminal-accent">{tagStats.length}</p>
+                                    </div>
+                                    <div className="bg-terminal-surface rounded-lg p-3 border border-terminal-border text-center">
+                                        <p className="text-terminal-muted text-[10px] uppercase font-bold tracking-wider">Top Count</p>
+                                        <p className="text-lg font-bold text-gray-100">{tagStats[0].count}</p>
+                                    </div>
+                                    <div className="bg-terminal-surface rounded-lg p-3 border border-terminal-border text-center">
+                                        <p className="text-terminal-muted text-[10px] uppercase font-bold tracking-wider">Weakest (Top 10)</p>
+                                        <p className="text-lg font-bold text-red-400 truncate px-1">{tagStats[Math.min(9, tagStats.length - 1)].name}</p>
+                                    </div>
                                 </div>
                             )}
                         </div>

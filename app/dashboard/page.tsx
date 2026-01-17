@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
 import {
     Terminal, LogOut, Link2, TrendingUp, Flame,
-    Calendar, Code2, Award, BarChart3, Users, Zap
+    Calendar, Code2, Award, BarChart3, Users, Zap, ArrowLeft, Mail
 } from 'lucide-react';
 import { getCodeforcesStats, getCodeforcesRatingColor, getCodeforcesSubmissions } from '@/lib/api/codeforces';
 import { getCodeChefStats, getCodeChefRatingColor } from '@/lib/api/codechef';
@@ -22,19 +22,24 @@ export default function DashboardPage() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-                if (userDoc.exists()) {
-                    const userData = userDoc.data();
-                    setUser({
-                        id: firebaseUser.uid,
-                        ...userData,
-                        joinedAt: userData.joinedAt?.toDate?.() || new Date(userData.joinedAt)
-                    } as User);
-                }
+                // Real-time listener for current user data
+                const userRef = doc(db, 'users', firebaseUser.uid);
+                const unsubDoc = onSnapshot(userRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const userData = docSnap.data();
+                        setUser({
+                            id: firebaseUser.uid,
+                            ...userData,
+                            joinedAt: userData.joinedAt?.toDate?.() || new Date(userData.joinedAt)
+                        } as User);
+                    }
+                    setLoading(false);
+                });
+                return () => unsubDoc();
             } else {
                 router.push('/');
+                setLoading(false);
             }
-            setLoading(false);
         });
 
         return () => unsubscribe();
@@ -61,6 +66,7 @@ export default function DashboardPage() {
 // MENTOR DASHBOARD
 // ==========================================
 function MentorDashboard({ user }: { user: User }) {
+    const router = useRouter();
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
     const [stats, setStats] = useState({
         totalMembers: 0,
@@ -70,47 +76,45 @@ function MentorDashboard({ user }: { user: User }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                // Fetch all users to calculate stats and find pending ones
-                const usersSnap = await getDocs(collection(db, 'users'));
-                const pending: any[] = [];
-                let approvedCount = 0;
-                let totalProbs = 0;
+        // Real-time listener for ALL users
+        const q = query(collection(db, 'users'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const pending: any[] = [];
+            let approvedCount = 0;
+            let totalProbs = 0;
 
-                usersSnap.forEach(docSnap => {
-                    const data = docSnap.data();
-                    if (data.role === 'member') {
-                        // Check for pending approval
-                        if (data.approved === false) {
-                            pending.push({ id: docSnap.id, ...data });
-                        } else {
-                            // Count approved members
-                            approvedCount++;
-                            // Calculate stats
-                            const userProbs =
-                                (data.platforms?.leetcode?.problemsSolved || 0) +
-                                (data.platforms?.codeforces?.problemsSolved || 0) +
-                                (data.platforms?.codechef?.problemsSolved || 0);
-                            totalProbs += userProbs;
-                        }
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.role === 'member') {
+                    // Check for pending approval
+                    if (data.approved === false) {
+                        pending.push({ id: docSnap.id, ...data });
+                    } else {
+                        // Count approved members
+                        approvedCount++;
+                        // Calculate stats
+                        const userProbs =
+                            (data.platforms?.leetcode?.problemsSolved || 0) +
+                            (data.platforms?.codeforces?.problemsSolved || 0) +
+                            (data.platforms?.codechef?.problemsSolved || 0);
+                        totalProbs += userProbs;
                     }
-                });
+                }
+            });
 
-                setPendingUsers(pending);
-                setStats({
-                    totalMembers: approvedCount,
-                    totalSolved: totalProbs,
-                    activeToday: 0 // Placeholder
-                });
-            } catch (error) {
-                console.error("Error fetching mentor data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
+            setPendingUsers(pending);
+            setStats({
+                totalMembers: approvedCount,
+                totalSolved: totalProbs,
+                activeToday: 0 // Placeholder
+            });
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching mentor data:", error);
+            setLoading(false);
+        });
 
-        fetchData();
+        return () => unsubscribe();
     }, []);
 
     const handleApprove = async (userId: string) => {
@@ -118,9 +122,7 @@ function MentorDashboard({ user }: { user: User }) {
             await updateDoc(doc(db, 'users', userId), {
                 approved: true
             });
-            // Remove from local state
-            setPendingUsers(prev => prev.filter(u => u.id !== userId));
-            setStats(prev => ({ ...prev, totalMembers: prev.totalMembers + 1 }));
+            // No need to manually update state, onSnapshot will handle it!
             alert("User approved successfully!");
         } catch (error) {
             console.error("Error approving user:", error);
@@ -139,7 +141,7 @@ function MentorDashboard({ user }: { user: User }) {
                     <div className="flex items-center space-x-3">
                         <Terminal className="w-8 h-8 text-terminal-secondary" />
                         <div>
-                            <h1 className="text-2xl font-bold gradient-text">TSAP <span className="text-xs px-2 py-0.5 rounded bg-terminal-secondary/20 text-terminal-secondary border border-terminal-secondary/50 ml-2">MENTOR</span></h1>
+                            <h1 className="text-2xl font-bold gradient-text">TSAP <span className="text-xs px-2 py-0.5 rounded bg-terminal-secondary/10 text-terminal-secondary border border-terminal-secondary/20 ml-2 tracking-wider">MENTOR</span></h1>
                             <p className="text-xs text-terminal-muted">Administration Console</p>
                         </div>
                     </div>
@@ -148,7 +150,7 @@ function MentorDashboard({ user }: { user: User }) {
                             <p className="font-medium text-gray-100 group-hover:text-terminal-primary transition-colors">{user.name}</p>
                             <p className="text-xs text-terminal-muted">Mentor</p>
                         </a>
-                        <button onClick={handleLogout} className="btn-ghost">
+                        <button onClick={handleLogout} className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10" title="Logout">
                             <LogOut className="w-5 h-5" />
                         </button>
                     </div>
@@ -158,36 +160,47 @@ function MentorDashboard({ user }: { user: User }) {
             <main className="container mx-auto px-4 py-8 space-y-8">
                 {/* Stats Row */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="card glass p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-terminal-muted text-sm">Total Members</p>
-                                <h3 className="text-3xl font-bold text-white mt-2">{stats.totalMembers}</h3>
-                            </div>
-                            <div className="p-3 bg-terminal-primary/20 rounded-lg text-terminal-primary">
-                                <Users className="w-6 h-6" />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="card glass p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-terminal-muted text-sm">Pending Requests</p>
-                                <h3 className="text-3xl font-bold text-yellow-400 mt-2">{pendingUsers.length}</h3>
-                            </div>
-                            <div className="p-3 bg-yellow-500/20 rounded-lg text-yellow-500">
-                                <Zap className="w-6 h-6" />
+                    <div className="relative group">
+                        <div className="absolute inset-0 bg-terminal-primary/20 blur-xl rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="card glass p-6 border-l-4 border-l-terminal-primary relative bg-terminal-surface/60">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-terminal-muted text-xs uppercase font-bold tracking-wider">Total Members</p>
+                                    <h3 className="text-4xl font-bold text-white mt-2">{stats.totalMembers}</h3>
+                                </div>
+                                <div className="p-3 bg-terminal-primary/20 rounded-xl text-terminal-primary shadow-lg shadow-terminal-primary/10">
+                                    <Users className="w-6 h-6" />
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div className="card glass p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-terminal-muted text-sm">Total Problems Solved</p>
-                                <h3 className="text-3xl font-bold text-terminal-accent mt-2">{stats.totalSolved}</h3>
+
+                    <div className="relative group">
+                        <div className="absolute inset-0 bg-yellow-500/20 blur-xl rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="card glass p-6 border-l-4 border-l-yellow-500 relative bg-terminal-surface/60">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-terminal-muted text-xs uppercase font-bold tracking-wider">Pending Requests</p>
+                                    <h3 className="text-4xl font-bold text-yellow-500 mt-2">{pendingUsers.length}</h3>
+                                </div>
+                                <div className="p-3 bg-yellow-500/20 rounded-xl text-yellow-500 shadow-lg shadow-yellow-500/10">
+                                    <Zap className="w-6 h-6" />
+                                </div>
                             </div>
-                            <div className="p-3 bg-terminal-accent/20 rounded-lg text-terminal-accent">
-                                <Code2 className="w-6 h-6" />
+                        </div>
+                    </div>
+
+                    <div className="relative group">
+                        <div className="absolute inset-0 bg-terminal-accent/20 blur-xl rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="card glass p-6 border-l-4 border-l-terminal-accent relative bg-terminal-surface/60">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-terminal-muted text-xs uppercase font-bold tracking-wider">Problems Solved</p>
+                                    <h3 className="text-4xl font-bold text-terminal-accent mt-2">{stats.totalSolved}</h3>
+                                </div>
+                                <div className="p-3 bg-terminal-accent/20 rounded-xl text-terminal-accent shadow-lg shadow-terminal-accent/10">
+                                    <Code2 className="w-6 h-6" />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -196,40 +209,52 @@ function MentorDashboard({ user }: { user: User }) {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Pending Approvals */}
                     <div className="lg:col-span-2">
-                        <div className="card">
-                            <h3 className="text-xl font-bold text-white mb-6 flex items-center">
-                                <Users className="w-5 h-5 mr-2 text-yellow-400" />
-                                Pending Approvals
-                            </h3>
+                        <div className="card glass min-h-[400px] flex flex-col">
+                            <div className="flex items-center justify-between mb-6 pb-4 border-b border-terminal-border/50">
+                                <h3 className="text-xl font-bold text-white flex items-center">
+                                    <div className="p-1.5 rounded bg-yellow-500/10 mr-3 border border-yellow-500/20">
+                                        <Users className="w-5 h-5 text-yellow-500" />
+                                    </div>
+                                    Pending Approvals
+                                    {pendingUsers.length > 0 && (
+                                        <span className="ml-3 text-xs bg-yellow-500 text-black font-bold px-2 py-0.5 rounded-full">
+                                            {pendingUsers.length}
+                                        </span>
+                                    )}
+                                </h3>
+                            </div>
 
                             {loading ? (
-                                <div className="text-center py-8"><div className="spinner mx-auto"></div></div>
+                                <div className="flex-1 flex items-center justify-center"><div className="spinner"></div></div>
                             ) : pendingUsers.length === 0 ? (
-                                <div className="text-center py-12 text-terminal-muted border-2 border-dashed border-terminal-border rounded-xl">
-                                    <p>No pending requests</p>
+                                <div className="flex-1 flex flex-col items-center justify-center text-terminal-muted border-2 border-dashed border-terminal-border/50 rounded-xl m-4 bg-terminal-surface/30">
+                                    <Zap className="w-12 h-12 mb-3 opacity-20" />
+                                    <p className="font-medium">No pending requests</p>
+                                    <p className="text-xs mt-1">New member signups will appear here</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {pendingUsers.map(req => (
-                                        <div key={req.id} className="bg-terminal-surface border border-terminal-border rounded-lg p-4 flex items-center justify-between hover:border-terminal-primary/50 transition-colors">
-                                            <div>
-                                                <h4 className="font-bold text-white">{req.name}</h4>
-                                                <div className="flex items-center space-x-4 text-xs text-terminal-muted mt-1">
-                                                    <span>{req.email}</span>
-                                                    <span>•</span>
-                                                    <span>{req.rollNumber || 'N/A'}</span>
-                                                    <span>•</span>
-                                                    <span>Batch {req.batch || 'N/A'}</span>
+                                        <div key={req.id} className="bg-terminal-surface/50 border border-terminal-border rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:border-terminal-primary/50 transition-all hover:shadow-lg hover:shadow-terminal-primary/5 group">
+                                            <div className="flex items-center space-x-4 mb-3 sm:mb-0">
+                                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center font-bold text-xl border border-gray-600">
+                                                    {req.name?.charAt(0)}
                                                 </div>
-                                                <div className="text-xs text-gray-500 mt-1">
-                                                    Joined: {req.joinedAt ? new Date(req.joinedAt?.seconds ? req.joinedAt.seconds * 1000 : req.joinedAt).toLocaleDateString() : 'Unknown'}
+                                                <div>
+                                                    <h4 className="font-bold text-white group-hover:text-terminal-primary transition-colors">{req.name}</h4>
+                                                    <div className="flex flex-wrap items-center gap-2 text-xs text-terminal-muted mt-1">
+                                                        <span className="flex items-center hover:text-white transition-colors"><Mail className="w-3 h-3 mr-1" />{req.email}</span>
+                                                        <span className="hidden sm:inline">•</span>
+                                                        <span className="bg-terminal-border/50 px-1.5 py-0.5 rounded text-gray-400">Batch {req.batch || 'N/A'}</span>
+                                                        <span className="bg-terminal-border/50 px-1.5 py-0.5 rounded text-gray-400">{req.rollNumber || 'N/A'}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <button
                                                 onClick={() => handleApprove(req.id)}
-                                                className="bg-green-500/10 text-green-400 border border-green-500/50 px-4 py-2 rounded-lg hover:bg-green-500/20 transition-colors font-medium text-sm flex items-center"
+                                                className="w-full sm:w-auto bg-green-500 text-black font-bold border border-green-400 px-6 py-2.5 rounded-lg hover:bg-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center"
                                             >
-                                                Approve Member
+                                                Approve
                                             </button>
                                         </div>
                                     ))}
@@ -240,15 +265,41 @@ function MentorDashboard({ user }: { user: User }) {
 
                     {/* Quick Actions */}
                     <div className="space-y-6">
-                        <div className="card bg-gradient-to-br from-terminal-surface to-terminal-surface/50 border-terminal-secondary/20">
-                            <h3 className="text-lg font-bold text-white mb-4">Quick Actions</h3>
-                            <button className="w-full btn-outline mb-3 justify-start">
-                                <Users className="w-4 h-4 mr-3" />
-                                View All Members
+                        <div className="card glass border-t-4 border-t-terminal-secondary">
+                            <h3 className="text-lg font-bold text-white mb-6 flex items-center">
+                                <Zap className="w-5 h-5 mr-3 text-terminal-secondary" />
+                                Quick Actions
+                            </h3>
+                            <button
+                                onClick={() => router.push('/leaderboard')}
+                                className="w-full group bg-terminal-surface hover:bg-terminal-surface/80 border border-terminal-border hover:border-terminal-primary p-4 rounded-xl flex items-center justify-between transition-all mb-4"
+                            >
+                                <div className="flex items-center">
+                                    <div className="p-2 rounded-lg bg-terminal-primary/10 text-terminal-primary mr-4 group-hover:scale-110 transition-transform">
+                                        <Users className="w-5 h-5" />
+                                    </div>
+                                    <div className="text-left">
+                                        <span className="block font-bold text-gray-200">View All Members</span>
+                                        <span className="text-xs text-terminal-muted">Check leaderboard & stats</span>
+                                    </div>
+                                </div>
+                                <ArrowLeft className="w-4 h-4 text-terminal-muted rotate-180 group-hover:translate-x-1 transition-transform" />
                             </button>
-                            <button className="w-full btn-outline mb-3 justify-start">
-                                <BarChart3 className="w-4 h-4 mr-3" />
-                                Club Analytics
+
+                            <button
+                                onClick={() => router.push('/analytics')}
+                                className="w-full group bg-terminal-surface hover:bg-terminal-surface/80 border border-terminal-border hover:border-terminal-accent p-4 rounded-xl flex items-center justify-between transition-all"
+                            >
+                                <div className="flex items-center">
+                                    <div className="p-2 rounded-lg bg-terminal-accent/10 text-terminal-accent mr-4 group-hover:scale-110 transition-transform">
+                                        <BarChart3 className="w-5 h-5" />
+                                    </div>
+                                    <div className="text-left">
+                                        <span className="block font-bold text-gray-200">Club Analytics</span>
+                                        <span className="text-xs text-terminal-muted">Overview of club performance</span>
+                                    </div>
+                                </div>
+                                <ArrowLeft className="w-4 h-4 text-terminal-muted rotate-180 group-hover:translate-x-1 transition-transform" />
                             </button>
                         </div>
                     </div>
@@ -377,7 +428,6 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                     lastSynced: new Date(),
                 };
             } else {
-                // Should not happen
                 return;
             }
 
@@ -386,16 +436,11 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                 [`platforms.${connectModal.platform}`]: platformData,
             });
 
-            // Update local state
-            const updatedUser = {
-                ...user,
-                platforms: {
-                    ...user.platforms,
-                    [connectModal.platform]: platformData,
-                },
-            };
-
-            setUser(updatedUser);
+            // Update local state - onSnapshot in parent will likely handle this too, 
+            // but for immediate feedback in this component context (if not using parent snapshot):
+            // Actually, because we added onSnapshot to the parent component default export,
+            // 'user' prop will update automatically! We don't need manual setUser here as much,
+            // but it's safe to keep for immediate feedback.
 
             // Close modal
             setConnectModal(null);
@@ -492,7 +537,7 @@ function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => 
                     <StatCard
                         icon={<Award className="w-8 h-8" />}
                         label="Total Solved"
-                        value={user.stats.totalProblems || 0}
+                        value={totalPlatformProblems}
                         color="primary"
                         subtext={`E: ${user.stats.easyProblems} M: ${user.stats.mediumProblems} H: ${user.stats.hardProblems}`}
                     />
@@ -803,7 +848,7 @@ function PlatformCard({
                         ) : (
                             <>
                                 <Link2 className="w-4 h-4 mr-2" />
-                                Connect {name}
+                                Connect
                             </>
                         )}
                     </button>
@@ -818,7 +863,7 @@ function QuickLinkCard({
     title,
     description,
     href,
-    color,
+    color
 }: {
     icon: React.ReactNode;
     title: string;
@@ -827,17 +872,17 @@ function QuickLinkCard({
     color: 'primary' | 'secondary' | 'accent';
 }) {
     const colorClass = {
-        primary: 'text-terminal-primary',
-        secondary: 'text-terminal-secondary',
-        accent: 'text-terminal-accent',
+        primary: 'text-terminal-primary group-hover:bg-terminal-primary/20',
+        secondary: 'text-terminal-secondary group-hover:bg-terminal-secondary/20',
+        accent: 'text-terminal-accent group-hover:bg-terminal-accent/20',
     }[color];
 
     return (
-        <a href={href} className="card-hover cursor-pointer">
-            <div className={`w-12 h-12 rounded-lg bg-terminal-border flex items-center justify-center mb-4 ${colorClass}`}>
+        <a href={href} className="card bg-terminal-surface hover:border-terminal-primary transition-all group block">
+            <div className={`p-3 rounded-lg w-fit mb-4 transition-colors ${colorClass.replace('group-hover:', '')} bg-opacity-10 bg-current`}>
                 {icon}
             </div>
-            <h4 className="text-lg font-bold text-gray-100 mb-2">{title}</h4>
+            <h3 className="text-lg font-bold text-gray-100 mb-2 group-hover:text-terminal-primary transition-colors">{title}</h3>
             <p className="text-sm text-terminal-muted">{description}</p>
         </a>
     );

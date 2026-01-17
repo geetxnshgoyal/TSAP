@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { LeaderboardEntry } from '@/types';
-import { Trophy, Medal, Award, TrendingUp, Flame, Code2 } from 'lucide-react';
+import { Trophy, Medal, Award, TrendingUp, Flame, Code2, Users, Crown, Sparkles } from 'lucide-react';
 
 export default function LeaderboardPage() {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -16,48 +16,62 @@ export default function LeaderboardPage() {
     }, [timeframe]);
 
     const loadLeaderboard = async () => {
+        setLoading(true);
         try {
             const usersQuery = query(collection(db, 'users'));
             const snapshot = await getDocs(usersQuery);
 
-            const entries: LeaderboardEntry[] = snapshot.docs.map((doc, index) => {
-                const data = doc.data();
-                const totalProblems =
-                    (data.platforms?.leetcode?.problemsSolved || 0) +
-                    (data.platforms?.codeforces?.problemsSolved || 0) +
-                    (data.platforms?.codechef?.problemsSolved || 0);
+            const entries: LeaderboardEntry[] = snapshot.docs
+                .map((doc) => {
+                    const data = doc.data();
 
-                const avgRating =
-                    ((data.platforms?.leetcode?.rating || 0) +
-                        (data.platforms?.codeforces?.rating || 0) +
-                        (data.platforms?.codechef?.rating || 0)) / 3;
+                    // Skip if not member or not approved
+                    if (data.role !== 'member' || !data.approved) return null;
 
-                return {
-                    userId: doc.id,
-                    user: {
-                        name: data.name,
-                        photoURL: data.photoURL,
-                        batch: data.batch,
-                    },
-                    rank: index + 1,
-                    totalProblems,
-                    weeklyProblems: data.stats?.weeklyProblems || 0,
-                    monthlyProblems: data.stats?.monthlyProblems || 0,
-                    currentStreak: data.stats?.currentStreak || 0,
-                    averageRating: Math.floor(avgRating),
-                    platforms: {
-                        leetcode: data.platforms?.leetcode?.problemsSolved,
-                        codeforces: data.platforms?.codeforces?.problemsSolved,
-                        codechef: data.platforms?.codechef?.problemsSolved,
-                    },
-                };
-            });
+                    const totalProblems =
+                        (data.platforms?.leetcode?.problemsSolved || 0) +
+                        (data.platforms?.codeforces?.problemsSolved || 0) +
+                        (data.platforms?.codechef?.problemsSolved || 0);
+
+                    // Calculate average rating only from connected platforms
+                    let ratingSum = 0;
+                    let ratingCount = 0;
+                    if (data.platforms?.leetcode?.rating) { ratingSum += data.platforms.leetcode.rating; ratingCount++; }
+                    if (data.platforms?.codeforces?.rating) { ratingSum += data.platforms.codeforces.rating; ratingCount++; }
+                    if (data.platforms?.codechef?.rating) { ratingSum += data.platforms.codechef.rating; ratingCount++; }
+
+                    const avgRating = ratingCount > 0 ? ratingSum / ratingCount : 0;
+
+                    return {
+                        userId: doc.id,
+                        user: {
+                            name: data.name || 'Anonymous',
+                            photoURL: data.photoURL,
+                            batch: data.batch,
+                            rollNumber: data.rollNumber
+                        },
+                        rank: 0, // Calculated later
+                        totalProblems,
+                        weeklyProblems: data.stats?.weeklyProblems || 0,
+                        monthlyProblems: data.stats?.monthlyProblems || 0,
+                        currentStreak: data.stats?.currentStreak || 0,
+                        averageRating: Math.floor(avgRating),
+                        platforms: {
+                            leetcode: data.platforms?.leetcode?.problemsSolved || 0,
+                            codeforces: data.platforms?.codeforces?.problemsSolved || 0,
+                            codechef: data.platforms?.codechef?.problemsSolved || 0,
+                        },
+                    };
+                })
+                .filter(entry => entry !== null) as LeaderboardEntry[];
 
             // Sort based on timeframe
             const sortedEntries = entries.sort((a, b) => {
                 if (timeframe === 'weekly') return b.weeklyProblems - a.weeklyProblems;
                 if (timeframe === 'monthly') return b.monthlyProblems - a.monthlyProblems;
-                return b.totalProblems - a.totalProblems;
+                // Default tie-breakers for all time: Problems -> Rating -> Streak
+                if (b.totalProblems !== a.totalProblems) return b.totalProblems - a.totalProblems;
+                return b.averageRating - a.averageRating;
             });
 
             // Update ranks
@@ -75,204 +89,207 @@ export default function LeaderboardPage() {
 
     return (
         <div className="min-h-screen grid-bg">
-            <div className="container mx-auto px-4 py-8">
-                <div className="mb-8">
-                    <div className="flex items-center space-x-3 mb-2">
-                        <Trophy className="w-10 h-10 text-terminal-accent" />
-                        <h1 className="text-4xl font-bold gradient-text">Leaderboard</h1>
+            <header className="border-b border-terminal-border bg-terminal-surface/50 backdrop-blur-lg sticky top-0 z-50">
+                <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                        <Trophy className="w-8 h-8 text-terminal-accent" />
+                        <div>
+                            <h1 className="text-2xl font-bold gradient-text">Leaderboard</h1>
+                            <p className="text-xs text-terminal-muted">Top Programmers of T.S.A.P</p>
+                        </div>
                     </div>
-                    <p className="text-terminal-muted">
-                        See how you rank against other TSAP members
-                    </p>
                 </div>
+            </header>
 
+            <div className="container mx-auto px-4 py-8 max-w-6xl">
                 {/* Timeframe Selector */}
-                <div className="card glass mb-8">
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={() => setTimeframe('all')}
-                            className={`px-4 py-2 rounded-md font-medium transition-all ${timeframe === 'all'
-                                    ? 'bg-terminal-primary text-terminal-bg'
-                                    : 'bg-terminal-border text-terminal-muted hover:text-gray-100'
-                                }`}
-                        >
-                            All Time
-                        </button>
-                        <button
-                            onClick={() => setTimeframe('monthly')}
-                            className={`px-4 py-2 rounded-md font-medium transition-all ${timeframe === 'monthly'
-                                    ? 'bg-terminal-primary text-terminal-bg'
-                                    : 'bg-terminal-border text-terminal-muted hover:text-gray-100'
-                                }`}
-                        >
-                            This Month
-                        </button>
-                        <button
-                            onClick={() => setTimeframe('weekly')}
-                            className={`px-4 py-2 rounded-md font-medium transition-all ${timeframe === 'weekly'
-                                    ? 'bg-terminal-primary text-terminal-bg'
-                                    : 'bg-terminal-border text-terminal-muted hover:text-gray-100'
-                                }`}
-                        >
-                            This Week
-                        </button>
+                <div className="flex justify-center mb-12">
+                    <div className="bg-terminal-surface border border-terminal-border p-1 rounded-lg flex space-x-1">
+                        {['all', 'monthly', 'weekly'].map((t) => (
+                            <button
+                                key={t}
+                                onClick={() => setTimeframe(t as any)}
+                                className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${timeframe === t
+                                    ? 'bg-terminal-primary text-white shadow-lg'
+                                    : 'text-terminal-muted hover:text-white hover:bg-white/5'
+                                    }`}
+                            >
+                                {t === 'all' ? 'All Time' : t === 'monthly' ? 'This Month' : 'This Week'}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                {/* Top 3 Podium */}
-                {!loading && leaderboard.length >= 3 && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        {/* 2nd Place */}
-                        <div className="order-2 md:order-1">
-                            <PodiumCard entry={leaderboard[1]} medal="silver" />
+                {loading ? (
+                    <div className="flex justify-center py-20">
+                        <div className="spinner"></div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Podium Section */}
+                        {leaderboard.length >= 3 && (
+                            <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-16 relative">
+                                <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-terminal-primary/5 to-transparent blur-3xl pointer-events-none"></div>
+                                {/* 2nd Place */}
+                                <div className="order-2 md:order-1 w-full md:w-1/3 max-w-[280px]">
+                                    <PodiumCard entry={leaderboard[1]} rank={2} />
+                                </div>
+                                {/* 1st Place */}
+                                <div className="order-1 md:order-2 w-full md:w-1/3 max-w-[300px] z-10 -translate-y-4">
+                                    <PodiumCard entry={leaderboard[0]} rank={1} />
+                                </div>
+                                {/* 3rd Place */}
+                                <div className="order-3 md:order-3 w-full md:w-1/3 max-w-[280px]">
+                                    <PodiumCard entry={leaderboard[2]} rank={3} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* List Header */}
+                        <div className="hidden md:flex items-center px-6 py-3 text-xs font-bold text-terminal-muted uppercase tracking-wider border-b border-terminal-border bg-terminal-surface/30 rounded-t-lg">
+                            <div className="w-16 text-center">Rank</div>
+                            <div className="flex-1">Member</div>
+                            <div className="w-24 text-center">Problems</div>
+                            <div className="w-24 text-center">Streak</div>
+                            <div className="w-24 text-center">Rating</div>
                         </div>
-                        {/* 1st Place */}
-                        <div className="order-1 md:order-2">
-                            <PodiumCard entry={leaderboard[0]} medal="gold" />
+
+                        {/* Full List (skip top 3 if showing podium, otherwise show all if small count) */}
+                        <div className="bg-terminal-surface/20 border border-terminal-border rounded-b-lg divide-y divide-terminal-border overflow-hidden">
+                            {leaderboard.slice(leaderboard.length >= 3 ? 3 : 0).map((entry) => (
+                                <LeaderboardRow key={entry.userId} entry={entry} />
+                            ))}
+                            {leaderboard.length === 0 && (
+                                <div className="py-12 text-center text-terminal-muted">
+                                    No members found for this period.
+                                </div>
+                            )}
                         </div>
-                        {/* 3rd Place */}
-                        <div className="order-3">
-                            <PodiumCard entry={leaderboard[2]} medal="bronze" />
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function PodiumCard({ entry, rank }: { entry: LeaderboardEntry; rank: number }) {
+    const isGold = rank === 1;
+    const isSilver = rank === 2;
+    const isBronze = rank === 3;
+
+    // Colors
+    const borderColor = isGold ? 'border-yellow-500/50' : isSilver ? 'border-gray-400/50' : 'border-orange-700/50';
+    const textColor = isGold ? 'text-yellow-400' : isSilver ? 'text-gray-300' : 'text-orange-400';
+    const bgColor = isGold ? 'bg-yellow-500/10' : isSilver ? 'bg-gray-400/10' : 'bg-orange-700/10';
+    const heightClass = isGold ? 'h-[320px]' : isSilver ? 'h-[280px]' : 'h-[260px]';
+    const glowClass = isGold ? 'shadow-[0_0_30px_rgba(234,179,8,0.2)]' : '';
+
+    return (
+        <div className={`relative flex flex-col items-center justify-end ${heightClass} ${bgColor} border ${borderColor} rounded-t-2xl p-6 backdrop-blur-sm ${glowClass}`}>
+            {/* Crown for first place */}
+            {isGold && <Crown className="w-12 h-12 text-yellow-500 absolute -top-14 animate-bounce" />}
+
+            {/* Rank Badge */}
+            <div className={`absolute -top-5 w-10 h-10 ${isGold ? 'bg-yellow-500' : isSilver ? 'bg-gray-400' : 'bg-orange-700'} text-black font-bold flex items-center justify-center rounded-full shadow-lg border-2 border-terminal-bg z-20`}>
+                {rank}
+            </div>
+
+            {/* Avatar Placeholder */}
+            <div className={`w-20 h-20 rounded-full border-4 ${isGold ? 'border-yellow-500' : isSilver ? 'border-gray-400' : 'border-orange-700'} bg-terminal-surface flex items-center justify-center text-3xl font-bold mb-4 shadow-lg`}>
+                {entry.user.name.charAt(0).toUpperCase()}
+            </div>
+
+            {/* Name & Batch */}
+            <h3 className="font-bold text-gray-100 text-lg text-center leading-tight mb-1 truncate w-full">{entry.user.name}</h3>
+            {entry.user.batch && <p className="text-xs text-terminal-muted mb-4">Batch {entry.user.batch}</p>}
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-2 w-full mt-auto">
+                <div className="text-center bg-terminal-bg/50 rounded p-2">
+                    <p className={`text-lg font-bold ${textColor}`}>{entry.totalProblems}</p>
+                    <p className="text-[10px] text-terminal-muted uppercase">Solved</p>
+                </div>
+                <div className="text-center bg-terminal-bg/50 rounded p-2">
+                    <p className={`text-lg font-bold text-terminal-accent`}>{entry.averageRating > 0 ? entry.averageRating : '-'}</p>
+                    <p className="text-[10px] text-terminal-muted uppercase">Rating</p>
+                </div>
+            </div>
+
+            {/* Platform Pills - Absolute or just small below */}
+            <div className="flex gap-1 mt-3 justify-center">
+                {entry.platforms.leetcode > 0 && <div className="w-2 h-2 rounded-full bg-yellow-500" title="LeetCode Active"></div>}
+                {entry.platforms.codeforces > 0 && <div className="w-2 h-2 rounded-full bg-blue-500" title="Codeforces Active"></div>}
+                {entry.platforms.codechef > 0 && <div className="w-2 h-2 rounded-full bg-orange-500" title="CodeChef Active"></div>}
+            </div>
+        </div>
+    );
+}
+
+function LeaderboardRow({ entry }: { entry: LeaderboardEntry }) {
+    return (
+        <div className="flex flex-col md:flex-row items-center p-4 hover:bg-white/5 transition-colors group">
+            {/* Rank & User Info */}
+            <div className="flex items-center w-full md:flex-1 mb-2 md:mb-0">
+                <div className="w-16 text-center font-mono font-bold text-terminal-muted group-hover:text-white transition-colors">
+                    #{entry.rank}
+                </div>
+
+                <div className="flex items-center flex-1 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 flex items-center justify-center font-bold text-gray-300 mr-4 shrink-0">
+                        {entry.user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                        <h4 className="font-bold text-gray-100 truncate">{entry.user.name}</h4>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            {entry.user.batch && (
+                                <span className="text-xs text-terminal-muted px-1.5 py-0.5 rounded bg-terminal-border/50">
+                                    Batch {entry.user.batch}
+                                </span>
+                            )}
+                            <div className="flex gap-1.5 ml-2">
+                                {entry.platforms.leetcode > 0 && (
+                                    <span className="text-[10px] px-1.5 rounded-sm bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-mono">
+                                        LC:{entry.platforms.leetcode}
+                                    </span>
+                                )}
+                                {entry.platforms.codeforces > 0 && (
+                                    <span className="text-[10px] px-1.5 rounded-sm bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                                        CF:{entry.platforms.codeforces}
+                                    </span>
+                                )}
+                                {entry.platforms.codechef > 0 && (
+                                    <span className="text-[10px] px-1.5 rounded-sm bg-orange-500/10 text-orange-500 border border-orange-500/20 font-mono">
+                                        CC:{entry.platforms.codechef}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                )}
+                </div>
+            </div>
 
-                {/* Full Leaderboard */}
-                <div className="card">
-                    {loading ? (
-                        <div className="flex justify-center py-12">
-                            <div className="spinner"></div>
+            {/* Stats Columns */}
+            <div className="flex w-full md:w-auto items-center justify-between md:justify-end gap-0 md:gap-0 pl-16 md:pl-0">
+                <div className="md:w-24 text-center md:text-center flex flex-col md:block items-start md:items-center">
+                    <span className="md:hidden text-[10px] text-terminal-muted uppercase">Solved</span>
+                    <span className="font-bold text-terminal-primary">{entry.totalProblems}</span>
+                </div>
+                <div className="md:w-24 text-center md:text-center flex flex-col md:block items-center">
+                    <span className="md:hidden text-[10px] text-terminal-muted uppercase">Streak</span>
+                    {entry.currentStreak > 0 ? (
+                        <div className="flex items-center justify-center text-orange-500 font-bold">
+                            <Flame className="w-3 h-3 mr-1" />
+                            {entry.currentStreak}
                         </div>
                     ) : (
-                        <div className="space-y-2">
-                            {leaderboard.map((entry, index) => (
-                                <LeaderboardRow key={entry.userId} entry={entry} highlight={index < 3} />
-                            ))}
-                        </div>
+                        <span className="text-terminal-muted">-</span>
                     )}
                 </div>
-            </div>
-        </div>
-    );
-}
-
-function PodiumCard({ entry, medal }: { entry: LeaderboardEntry; medal: 'gold' | 'silver' | 'bronze' }) {
-    const medalColors = {
-        gold: 'from-yellow-500 to-amber-600',
-        silver: 'from-gray-300 to-gray-500',
-        bronze: 'from-orange-700 to-amber-900',
-    };
-
-    const medalIcons = {
-        gold: '🥇',
-        silver: '🥈',
-        bronze: '🥉',
-    };
-
-    const heights = {
-        gold: 'md:h-80',
-        silver: 'md:h-64',
-        bronze: 'md:h-56',
-    };
-
-    return (
-        <div className={`card-hover ${heights[medal]} flex flex-col justify-between relative overflow-hidden`}>
-            <div className={`absolute inset-0 bg-gradient-to-br ${medalColors[medal]} opacity-5`}></div>
-            <div className="relative z-10">
-                <div className="text-center mb-4">
-                    <div className="text-6xl mb-2">{medalIcons[medal]}</div>
-                    <div className="text-2xl font-bold text-terminal-primary">#{entry.rank}</div>
-                </div>
-                <div className="text-center">
-                    <div className="w-20 h-20 rounded-full bg-terminal-border flex items-center justify-center mx-auto mb-3 text-3xl">
-                        {entry.user.name.charAt(0)}
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-100 mb-1">{entry.user.name}</h3>
-                    {entry.user.batch && (
-                        <p className="text-sm text-terminal-muted">Batch {entry.user.batch}</p>
-                    )}
-                </div>
-            </div>
-            <div className="relative z-10 grid grid-cols-2 gap-4 pt-4 border-t border-terminal-border">
-                <div className="text-center">
-                    <p className="text-2xl font-bold text-terminal-primary">{entry.totalProblems}</p>
-                    <p className="text-xs text-terminal-muted">Problems</p>
-                </div>
-                <div className="text-center">
-                    <p className="text-2xl font-bold text-terminal-secondary">{entry.currentStreak}</p>
-                    <p className="text-xs text-terminal-muted">Streak</p>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function LeaderboardRow({ entry, highlight }: { entry: LeaderboardEntry; highlight: boolean }) {
-    const getRankIcon = (rank: number) => {
-        if (rank === 1) return <Trophy className="w-5 h-5 text-yellow-500" />;
-        if (rank === 2) return <Medal className="w-5 h-5 text-gray-400" />;
-        if (rank === 3) return <Award className="w-5 h-5 text-orange-700" />;
-        return <span className="text-terminal-muted font-mono">#{rank}</span>;
-    };
-
-    return (
-        <div className={`p-4 rounded-lg transition-all hover:bg-terminal-border/50 ${highlight ? 'bg-terminal-primary/5 border border-terminal-primary/20' : ''
-            }`}>
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4 flex-1">
-                    <div className="w-12 text-center">
-                        {getRankIcon(entry.rank)}
-                    </div>
-
-                    <div className="w-12 h-12 rounded-full bg-terminal-border flex items-center justify-center text-lg font-bold">
-                        {entry.user.name.charAt(0)}
-                    </div>
-
-                    <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                            <h3 className="font-bold text-gray-100">{entry.user.name}</h3>
-                            {entry.user.batch && (
-                                <span className="text-xs text-terminal-muted">Batch {entry.user.batch}</span>
-                            )}
-                        </div>
-                        <div className="flex items-center space-x-4 mt-1">
-                            {entry.platforms.leetcode && (
-                                <span className="text-xs badge platform-leetcode">LC: {entry.platforms.leetcode}</span>
-                            )}
-                            {entry.platforms.codeforces && (
-                                <span className="text-xs badge platform-codeforces">CF: {entry.platforms.codeforces}</span>
-                            )}
-                            {entry.platforms.codechef && (
-                                <span className="text-xs badge platform-codechef">CC: {entry.platforms.codechef}</span>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="hidden md:flex items-center space-x-8">
-                    <div className="text-center">
-                        <div className="flex items-center space-x-1">
-                            <Code2 className="w-4 h-4 text-terminal-primary" />
-                            <span className="text-xl font-bold text-gray-100">{entry.totalProblems}</span>
-                        </div>
-                        <p className="text-xs text-terminal-muted">Problems</p>
-                    </div>
-
-                    <div className="text-center">
-                        <div className="flex items-center space-x-1">
-                            <Flame className="w-4 h-4 text-terminal-accent" />
-                            <span className="text-xl font-bold text-terminal-accent">{entry.currentStreak}</span>
-                        </div>
-                        <p className="text-xs text-terminal-muted">Streak</p>
-                    </div>
-
-                    <div className="text-center">
-                        <div className="flex items-center space-x-1">
-                            <TrendingUp className="w-4 h-4 text-terminal-secondary" />
-                            <span className="text-xl font-bold text-terminal-secondary">{entry.averageRating}</span>
-                        </div>
-                        <p className="text-xs text-terminal-muted">Avg Rating</p>
-                    </div>
+                <div className="md:w-24 text-center md:text-center flex flex-col md:block items-end md:items-center">
+                    <span className="md:hidden text-[10px] text-terminal-muted uppercase">Rating</span>
+                    <span className={`font-mono ${entry.averageRating > 0 ? 'text-blue-400' : 'text-terminal-muted'}`}>
+                        {entry.averageRating > 0 ? entry.averageRating : '-'}
+                    </span>
                 </div>
             </div>
         </div>
