@@ -139,30 +139,61 @@ export function getCodeforcesRatingColor(rating: number): string {
 /**
  * Get tag statistics from submissions
  */
-export async function getCodeforcesTagStats(handle: string): Promise<{ [key: string]: number }> {
+// ... existing code ...
+
+/**
+ * Get advanced tag statistics including solved and wrong counts
+ */
+export async function getCodeforcesAdvancedTagStats(handle: string): Promise<{ [key: string]: { solved: number; wrong: number } }> {
     try {
         const submissions = await getCodeforcesSubmissions(handle);
-        const tagCounts: { [key: string]: number } = {};
+        const userStats: { [key: string]: { solved: number; wrong: number } } = {};
         const solvedProblems = new Set<string>();
 
         submissions.forEach(sub => {
-            if (sub.verdict === 'OK' && sub.problem.tags) {
+            if (sub.problem.tags) {
                 const problemId = `${sub.problem.contestId}-${sub.problem.index}`;
 
-                // Only count unique problems per tag
-                if (!solvedProblems.has(problemId)) {
-                    solvedProblems.add(problemId);
+                // Initialize tags if needed
+                sub.problem.tags.forEach(tag => {
+                    if (!userStats[tag]) {
+                        userStats[tag] = { solved: 0, wrong: 0 };
+                    }
+                });
 
+                if (sub.verdict === 'OK') {
+                    // Only count unique solved problems
+                    if (!solvedProblems.has(problemId)) {
+                        solvedProblems.add(problemId);
+                        sub.problem.tags.forEach(tag => {
+                            userStats[tag].solved += 1;
+                        });
+                    }
+                } else {
+                    // Count every wrong submission
                     sub.problem.tags.forEach(tag => {
-                        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+                        userStats[tag].wrong += 1;
                     });
                 }
             }
         });
 
-        return tagCounts;
+        return userStats;
     } catch (error) {
         console.error('Error calculating tag stats:', error);
         return {};
     }
+}
+
+/**
+ * Get tag statistics from submissions
+ * @deprecated Use getCodeforcesAdvancedTagStats instead
+ */
+export async function getCodeforcesTagStats(handle: string): Promise<{ [key: string]: number }> {
+    const advanced = await getCodeforcesAdvancedTagStats(handle);
+    const simple: { [key: string]: number } = {};
+    Object.entries(advanced).forEach(([tag, stats]) => {
+        simple[tag] = stats.solved;
+    });
+    return simple;
 }

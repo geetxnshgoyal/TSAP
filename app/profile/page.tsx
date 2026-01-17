@@ -7,7 +7,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
 import { Terminal, LogOut, ArrowLeft, Save, User as UserIcon, Mail, Hash, BookOpen, Activity, BarChart, PieChart } from 'lucide-react';
-import { getCodeforcesTagStats } from '@/lib/api/codeforces';
+import { getCodeforcesAdvancedTagStats } from '@/lib/api/codeforces';
 import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
     BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
@@ -27,7 +27,7 @@ export default function ProfilePage() {
     });
 
     // Analytics State
-    const [tagStats, setTagStats] = useState<{ name: string; count: number; fullMark: number }[]>([]);
+    const [tagStats, setTagStats] = useState<{ name: string; count: number; wrong: number; fullMark: number }[]>([]);
     const [loadingStats, setLoadingStats] = useState(false);
     const [chartType, setChartType] = useState<'radar' | 'bar'>('radar');
 
@@ -67,20 +67,20 @@ export default function ProfilePage() {
     const fetchTopicStats = async (handle: string) => {
         setLoadingStats(true);
         try {
-            const stats = await getCodeforcesTagStats(handle);
+            const stats = await getCodeforcesAdvancedTagStats(handle);
 
-            // Convert to array and sort
+            // Convert to array and sort by SOLVED count (descending) for charts
             const sortedStats = Object.entries(stats)
-                .map(([name, count]) => ({ name, count }))
+                .map(([name, { solved, wrong }]) => ({ name, count: solved, wrong }))
                 .sort((a, b) => b.count - a.count);
 
             const maxCount = sortedStats.length > 0 ? sortedStats[0].count : 100;
 
             // Format for charts
-            // Take top 8 for Radar, Top 15 for Bar
             setTagStats(sortedStats.map(s => ({
-                name: s.name.charAt(0).toUpperCase() + s.name.slice(1), // Capitalize
+                name: s.name.charAt(0).toUpperCase() + s.name.slice(1),
                 count: s.count,
+                wrong: s.wrong,
                 fullMark: maxCount
             })));
 
@@ -344,8 +344,11 @@ export default function ProfilePage() {
                                         <p className="text-lg font-bold text-gray-100">{tagStats[0].count}</p>
                                     </div>
                                     <div className="bg-terminal-surface rounded-lg p-3 border border-terminal-border text-center">
-                                        <p className="text-terminal-muted text-[10px] uppercase font-bold tracking-wider">Weakest (Top 10)</p>
-                                        <p className="text-lg font-bold text-red-400 truncate px-1">{tagStats[Math.min(9, tagStats.length - 1)].name}</p>
+                                        <p className="text-terminal-muted text-[10px] uppercase font-bold tracking-wider">Weakest (Most Fails)</p>
+                                        <p className="text-lg font-bold text-red-400 truncate px-1">
+                                            {tagStats.reduce((prev, current) => (prev.wrong > current.wrong) ? prev : current).name}
+                                        </p>
+                                        <p className="text-[10px] text-terminal-muted">{tagStats.reduce((prev, current) => (prev.wrong > current.wrong) ? prev : current).wrong} wrong attempts</p>
                                     </div>
                                 </div>
                             )}
