@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read and write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Allow all authenticated users to read other users (for leaderboard)
+      allow read: if request.auth != null;
+    }
+    
+    // Allow authenticated users to access submissions
+    match /submissions/{submissionId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Allow authenticated users to access leaderboard data
+    match /leaderboard/{entry} {
+      allow read: if request.auth != null;
+    }
+    
+    // Admin-only access for certain collections
+    match /admin/{document=**} {
+      allow read, write: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'mentor'];
+    }
+  }
+}

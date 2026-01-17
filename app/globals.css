@@ -1,0 +1,212 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-terminal-border;
+  }
+
+  body {
+    @apply bg-terminal-bg text-gray-100 font-sans;
+    background-image:
+      radial-gradient(circle at 20% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.05) 0%, transparent 50%);
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-terminal-surface;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-terminal-primary rounded;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-terminal-secondary;
+  }
+}
+
+@layer components {
+
+  /* Card Styles */
+  .card {
+    @apply bg-terminal-surface border border-terminal-border rounded-lg p-6 shadow-lg backdrop-blur-sm transition-all duration-300;
+  }
+
+  .card-hover {
+    @apply card hover:border-terminal-primary hover:shadow-xl hover:shadow-terminal-primary/10 hover:-translate-y-1;
+  }
+
+  /* Button Styles */
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-terminal-primary text-terminal-bg hover:bg-terminal-primary/90 shadow-lg shadow-terminal-primary/20 hover:shadow-terminal-primary/40;
+  }
+
+  .btn-secondary {
+    @apply btn bg-terminal-secondary text-terminal-bg hover:bg-terminal-secondary/90 shadow-lg shadow-terminal-secondary/20 hover:shadow-terminal-secondary/40;
+  }
+
+  .btn-outline {
+    @apply btn border border-terminal-primary text-terminal-primary hover:bg-terminal-primary hover:text-terminal-bg;
+  }
+
+  .btn-ghost {
+    @apply btn hover:bg-terminal-border;
+  }
+
+  /* Input Styles */
+  .input {
+    @apply bg-terminal-surface border border-terminal-border rounded-md px-4 py-2 text-gray-100 placeholder-terminal-muted focus:outline-none focus:ring-2 focus:ring-terminal-primary focus:border-transparent transition-all duration-200;
+  }
+
+  /* Badge Styles */
+  .badge {
+    @apply px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-terminal-primary/20 text-terminal-primary border border-terminal-primary/30;
+  }
+
+  .badge-warning {
+    @apply badge bg-terminal-accent/20 text-terminal-accent border border-terminal-accent/30;
+  }
+
+  .badge-error {
+    @apply badge bg-terminal-danger/20 text-terminal-danger border border-terminal-danger/30;
+  }
+
+  .badge-info {
+    @apply badge bg-terminal-secondary/20 text-terminal-secondary border border-terminal-secondary/30;
+  }
+
+  /* Code Block Styles */
+  .code-block {
+    @apply bg-black/50 border border-terminal-border rounded-lg p-4 font-mono text-sm text-terminal-primary overflow-x-auto;
+  }
+
+  /* Complexity Badge Colors */
+  .complexity-easy {
+    @apply text-terminal-primary;
+  }
+
+  .complexity-medium {
+    @apply text-terminal-accent;
+  }
+
+  .complexity-hard {
+    @apply text-terminal-danger;
+  }
+
+  /* Glassmorphism Effect */
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+
+  /* Grid Pattern Background */
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(31, 41, 55, 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(31, 41, 55, 0.5) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-terminal-primary via-terminal-secondary to-terminal-accent bg-clip-text text-transparent;
+  }
+
+  /* Platform Badges */
+  .platform-leetcode {
+    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30;
+  }
+
+  .platform-codeforces {
+    @apply bg-blue-500/20 text-blue-400 border border-blue-500/30;
+  }
+
+  .platform-codechef {
+    @apply bg-orange-500/20 text-orange-400 border border-orange-500/30;
+  }
+
+  /* Stats Card with Glow */
+  .stat-card {
+    @apply card-hover relative overflow-hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-terminal-primary/10 via-transparent to-terminal-secondary/10 opacity-0 transition-opacity duration-300;
+  }
+
+  .stat-card:hover::before {
+    @apply opacity-100;
+  }
+
+  /* Loading Spinner */
+  .spinner {
+    @apply w-6 h-6 border-2 border-terminal-muted border-t-terminal-primary rounded-full animate-spin;
+  }
+
+  /* Heatmap Cell */
+  .heatmap-cell {
+    @apply rounded-sm cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-terminal-primary;
+  }
+
+  .heatmap-0 {
+    @apply bg-terminal-border;
+  }
+
+  .heatmap-1 {
+    @apply bg-terminal-primary/20;
+  }
+
+  .heatmap-2 {
+    @apply bg-terminal-primary/40;
+  }
+
+  .heatmap-3 {
+    @apply bg-terminal-primary/60;
+  }
+
+  .heatmap-4 {
+    @apply bg-terminal-primary/80;
+  }
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 0 0 10px currentColor;
+  }
+
+  .glow {
+    box-shadow: 0 0 20px currentColor;
+  }
+
+  /* Animation delays */
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+
+  .animation-delay-600 {
+    animation-delay: 600ms;
+  }
+}
