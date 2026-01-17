@@ -8,7 +8,7 @@ import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
 import {
     Terminal, LogOut, Link2, TrendingUp, Flame,
-    Calendar, Code2, Award, BarChart3, Users
+    Calendar, Code2, Award, BarChart3, Users, Zap
 } from 'lucide-react';
 import { getCodeforcesStats, getCodeforcesRatingColor } from '@/lib/api/codeforces';
 import { getCodeChefStats, getCodeChefRatingColor } from '@/lib/api/codechef';
@@ -17,9 +17,6 @@ export default function DashboardPage() {
     const router = useRouter();
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
-    const [connectModal, setConnectModal] = useState<{ platform: string; name: string } | null>(null);
-    const [usernameInput, setUsernameInput] = useState('');
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -41,6 +38,233 @@ export default function DashboardPage() {
 
         return () => unsubscribe();
     }, [router]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen grid-bg flex items-center justify-center">
+                <div className="spinner"></div>
+            </div>
+        );
+    }
+
+    if (!user) return null;
+
+    if (user.role === 'mentor' || user.role === 'admin') {
+        return <MentorDashboard user={user} />;
+    }
+
+    return <MemberDashboard user={user} setUser={setUser} />;
+}
+
+// ==========================================
+// MENTOR DASHBOARD
+// ==========================================
+function MentorDashboard({ user }: { user: User }) {
+    const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+    const [stats, setStats] = useState({
+        totalMembers: 0,
+        totalSolved: 0,
+        activeToday: 0
+    });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                // Fetch all users to calculate stats and find pending ones
+                const usersSnap = await getDocs(collection(db, 'users'));
+                const pending: any[] = [];
+                let approvedCount = 0;
+                let totalProbs = 0;
+
+                usersSnap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    if (data.role === 'member') {
+                        // Check for pending approval
+                        if (data.approved === false) {
+                            pending.push({ id: docSnap.id, ...data });
+                        } else {
+                            // Count approved members
+                            approvedCount++;
+                            // Calculate stats
+                            const userProbs =
+                                (data.platforms?.leetcode?.problemsSolved || 0) +
+                                (data.platforms?.codeforces?.problemsSolved || 0) +
+                                (data.platforms?.codechef?.problemsSolved || 0);
+                            totalProbs += userProbs;
+                        }
+                    }
+                });
+
+                setPendingUsers(pending);
+                setStats({
+                    totalMembers: approvedCount,
+                    totalSolved: totalProbs,
+                    activeToday: 0 // Placeholder
+                });
+            } catch (error) {
+                console.error("Error fetching mentor data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    const handleApprove = async (userId: string) => {
+        try {
+            await updateDoc(doc(db, 'users', userId), {
+                approved: true
+            });
+            // Remove from local state
+            setPendingUsers(prev => prev.filter(u => u.id !== userId));
+            setStats(prev => ({ ...prev, totalMembers: prev.totalMembers + 1 }));
+            alert("User approved successfully!");
+        } catch (error) {
+            console.error("Error approving user:", error);
+            alert("Failed to approve user");
+        }
+    };
+
+    const handleLogout = async () => {
+        await auth.signOut();
+    };
+
+    return (
+        <div className="min-h-screen grid-bg">
+            <header className="border-b border-terminal-border bg-terminal-surface/50 backdrop-blur-lg sticky top-0 z-50">
+                <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                        <Terminal className="w-8 h-8 text-terminal-secondary" />
+                        <div>
+                            <h1 className="text-2xl font-bold gradient-text">TSAP <span className="text-xs px-2 py-0.5 rounded bg-terminal-secondary/20 text-terminal-secondary border border-terminal-secondary/50 ml-2">MENTOR</span></h1>
+                            <p className="text-xs text-terminal-muted">Administration Console</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                        <div className="hidden md:block text-right">
+                            <p className="font-medium text-gray-100">{user.name}</p>
+                            <p className="text-xs text-terminal-muted">Mentor</p>
+                        </div>
+                        <button onClick={handleLogout} className="btn-ghost">
+                            <LogOut className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <main className="container mx-auto px-4 py-8 space-y-8">
+                {/* Stats Row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="card glass p-6">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-terminal-muted text-sm">Total Members</p>
+                                <h3 className="text-3xl font-bold text-white mt-2">{stats.totalMembers}</h3>
+                            </div>
+                            <div className="p-3 bg-terminal-primary/20 rounded-lg text-terminal-primary">
+                                <Users className="w-6 h-6" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="card glass p-6">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-terminal-muted text-sm">Pending Requests</p>
+                                <h3 className="text-3xl font-bold text-yellow-400 mt-2">{pendingUsers.length}</h3>
+                            </div>
+                            <div className="p-3 bg-yellow-500/20 rounded-lg text-yellow-500">
+                                <Zap className="w-6 h-6" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="card glass p-6">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-terminal-muted text-sm">Total Problems Solved</p>
+                                <h3 className="text-3xl font-bold text-terminal-accent mt-2">{stats.totalSolved}</h3>
+                            </div>
+                            <div className="p-3 bg-terminal-accent/20 rounded-lg text-terminal-accent">
+                                <Code2 className="w-6 h-6" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Pending Approvals */}
+                    <div className="lg:col-span-2">
+                        <div className="card">
+                            <h3 className="text-xl font-bold text-white mb-6 flex items-center">
+                                <Users className="w-5 h-5 mr-2 text-yellow-400" />
+                                Pending Approvals
+                            </h3>
+
+                            {loading ? (
+                                <div className="text-center py-8"><div className="spinner mx-auto"></div></div>
+                            ) : pendingUsers.length === 0 ? (
+                                <div className="text-center py-12 text-terminal-muted border-2 border-dashed border-terminal-border rounded-xl">
+                                    <p>No pending requests</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {pendingUsers.map(req => (
+                                        <div key={req.id} className="bg-terminal-surface border border-terminal-border rounded-lg p-4 flex items-center justify-between hover:border-terminal-primary/50 transition-colors">
+                                            <div>
+                                                <h4 className="font-bold text-white">{req.name}</h4>
+                                                <div className="flex items-center space-x-4 text-xs text-terminal-muted mt-1">
+                                                    <span>{req.email}</span>
+                                                    <span>•</span>
+                                                    <span>{req.rollNumber || 'N/A'}</span>
+                                                    <span>•</span>
+                                                    <span>Batch {req.batch || 'N/A'}</span>
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1">
+                                                    Joined: {req.joinedAt ? new Date(req.joinedAt?.seconds ? req.joinedAt.seconds * 1000 : req.joinedAt).toLocaleDateString() : 'Unknown'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleApprove(req.id)}
+                                                className="bg-green-500/10 text-green-400 border border-green-500/50 px-4 py-2 rounded-lg hover:bg-green-500/20 transition-colors font-medium text-sm flex items-center"
+                                            >
+                                                Approve Member
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div className="space-y-6">
+                        <div className="card bg-gradient-to-br from-terminal-surface to-terminal-surface/50 border-terminal-secondary/20">
+                            <h3 className="text-lg font-bold text-white mb-4">Quick Actions</h3>
+                            <button className="w-full btn-outline mb-3 justify-start">
+                                <Users className="w-4 h-4 mr-3" />
+                                View All Members
+                            </button>
+                            <button className="w-full btn-outline mb-3 justify-start">
+                                <BarChart3 className="w-4 h-4 mr-3" />
+                                Club Analytics
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}
+
+// ==========================================
+// MEMBER DASHBOARD
+// ==========================================
+function MemberDashboard({ user, setUser }: { user: User, setUser: (u: User) => void }) {
+    const router = useRouter();
+    const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
+    const [connectModal, setConnectModal] = useState<{ platform: string; name: string } | null>(null);
+    const [usernameInput, setUsernameInput] = useState('');
 
     const handleLogout = async () => {
         await auth.signOut();
@@ -146,16 +370,6 @@ export default function DashboardPage() {
         }
     };
 
-    if (loading) {
-        return (
-            <div className="min-h-screen grid-bg flex items-center justify-center">
-                <div className="spinner"></div>
-            </div>
-        );
-    }
-
-    if (!user) return null;
-
     const totalPlatformProblems =
         (user.platforms.leetcode?.problemsSolved || 0) +
         (user.platforms.codeforces?.problemsSolved || 0) +
@@ -178,9 +392,6 @@ export default function DashboardPage() {
                         <NavLink href="/dashboard" active>Dashboard</NavLink>
                         <NavLink href="/leaderboard">Leaderboard</NavLink>
                         <NavLink href="/analytics">Analytics</NavLink>
-                        {user.role === 'admin' || user.role === 'mentor' ? (
-                            <NavLink href="/admin">Admin Panel</NavLink>
-                        ) : null}
                     </nav>
 
                     <div className="flex items-center space-x-4">
